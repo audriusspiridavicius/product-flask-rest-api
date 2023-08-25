@@ -1,22 +1,16 @@
 from init import app, db
-from flask_restful import Api, Resource
-from flask import json, request, jsonify
+from flask_restful import Api, Resource, marshal_with, fields, reqparse
+from flask import abort, request
 from flask_marshmallow import Marshmallow
 
 
 from model.product import Product
 api = Api(app)
-m = Marshmallow(app)
+marshmallow = Marshmallow(app)
 
- 
-# class ProductSchema(Schema):
-#     name = fields.Str()
-#     description = fields.Str()
-#     quantity = fields.Float()
-#     price = fields.Float()
-# Užduoties schema
+product_fields = {"name": fields.Raw, "description": fields.Raw, "price": fields.Float, "quantity": fields.Integer}
 
-class ProductSchema(m.Schema):
+class ProductSchema(marshmallow.Schema):
     class Meta:
         fields = ('id','name', 'description', 'quantity', 'price')
 
@@ -24,22 +18,62 @@ class ProductSchema(m.Schema):
 products_chema = ProductSchema(many=True)
 class ProductApi(Resource):
     
-    
-    def get(self,id):
+    @marshal_with(product_fields)
+    def get(self,product_id):
         
-        product = Product.query.filter_by(id=id).first()
-        
-        return ProductSchema().jsonify(product)
+        product = db.session.query(Product).get(product_id)
+
+        return product if product else abort(401,f"Product with id={product_id} was not found")
     
     def post(self):
-        product_dict = ProductSchema().loads(request.data)
-        product = Product(**product_dict)
         
+        try:
+            product_dict = ProductSchema().loads(request.data)
+        except:
+            return {"message": "Invalid data"}
+        
+        product = Product(**product_dict)
+
         db.session.add(product)
         db.session.commit()
         
         return ProductSchema().jsonify(product)
-         
+    
+    def delete(self, product_id):
+        
+        product = db.session.query(Product).get(product_id)
+        if product:
+        
+            db.session.delete(product)
+            db.session.commit()
+            return ProductSchema().jsonify(product)
+        else:
+           return {"message": "Such product was not found"} 
+    
+    def put(self, product_id):
+        
+        product:Product = db.session.query(Product).get(product_id)
+        
+        if product:
+
+            product_data_parser = reqparse.RequestParser()
+            product_data_parser.add_argument('name', type=str, help='name message error')
+            product_data_parser.add_argument('description', type=str, help='description message')
+            product_data_parser.add_argument('quantity', type=int, help='quantity message')
+            product_data_parser.add_argument('price', type=float, help='Invalid field!')
+        
+            update_product_args = product_data_parser.parse_args()
+            
+            product.description = update_product_args["description"]
+            product.price = update_product_args["price"]
+            
+            db.session.commit()
+                
+            return ProductSchema().jsonify(product)
+        else:
+            return abort(500, "no such product was found")
+        
+    
 class ProductsApi(Resource):
     def get(self):
         
@@ -48,12 +82,8 @@ class ProductsApi(Resource):
         return products_chema.jsonify(products)
     
 
-
-api.add_resource(ProductApi,'/product/<int:id>','/add-product')
+api.add_resource(ProductApi,'/product/<int:product_id>','/product')
 api.add_resource(ProductsApi,'/products')
-
-
-
 
 
 if __name__ == '__main__':
