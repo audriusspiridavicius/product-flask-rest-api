@@ -13,6 +13,7 @@ db.init_app(app)
 migrate.init_app(app,db)
 
 from model.product import Product
+from model.comment import Comment
 
 
 
