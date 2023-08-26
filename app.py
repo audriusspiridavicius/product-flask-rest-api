@@ -1,51 +1,41 @@
-from pprint import pprint
-from marshmallow import ValidationError
+import pprint
+from marshmallow import INCLUDE, ValidationError, post_load, validates,fields
 from init import app, db
-from flask_restful import Api, Resource, marshal_with, fields, reqparse
+from flask_restful import Api, Resource, marshal_with, reqparse
 from flask import abort, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow 
-
-
+from schema.productschema import ProductSchema
+from schema.commentschema import CommentSchema
 from model.product import Product
 api = Api(app)
 marshmallow = Marshmallow(app)
 
-product_fields = {"name": fields.Raw, "description": fields.Raw, "price": fields.Float, "quantity": fields.Integer}
-
-# class ProductSchema(marshmallow.Schema):
-#     class Meta:
-#         fields = ('id','name', 'description', 'quantity', 'price')
-
-class ProductSchema(marshmallow.SQLAlchemyAutoSchema):
-    class Meta:
-        model = Product
-
+# product_fields = {"name": fields.Raw, "description": fields.Raw, "price": fields.Float, "quantity": fields.Integer}
 
 products_chema = ProductSchema(many=True)
 class ProductApi(Resource):
     
-    @marshal_with(product_fields)
+    # @marshal_with(product_fields)
     def get(self,product_id):
         
-        product = db.session.query(Product).get(product_id)
+        product = db.session.get(Product,product_id)
 
-        return product if product else abort(401,f"Product with id={product_id} was not found")
+        return ProductSchema().dump(product) if product else abort(401,f"Product with id={product_id} was not found")
     
     def post(self):
         
         try:
-           product_dict = ProductSchema().loads(request.data)
-           product = Product(**product_dict)
+           product = ProductSchema().loads(request.data)
+           print(f" product type = {type(product)}")
         except ValidationError as err:
             return abort(501,err.messages)
-        
         
         
         db.session.add(product)
         db.session.commit()
         
-        return ProductSchema().jsonify(product)
+        return ProductSchema().dump(product)
     
     def delete(self, product_id):
         
@@ -54,30 +44,29 @@ class ProductApi(Resource):
         
             db.session.delete(product)
             db.session.commit()
-            return ProductSchema().jsonify(product)
+            return ProductSchema().dump(product)
         else:
            return {"message": "Such product was not found"} 
     
     def put(self, product_id):
         
-        product:Product = db.session.query(Product).get(product_id)
+        product:Product = db.session.get(Product,product_id)
         
         if product:
+            try:
+                new_data_product:Product = ProductSchema().loads(request.data)
 
-            product_data_parser = reqparse.RequestParser()
-            product_data_parser.add_argument('name', type=str, help='name message error')
-            product_data_parser.add_argument('description', type=str, help='description message')
-            product_data_parser.add_argument('quantity', type=int, help='quantity message')
-            product_data_parser.add_argument('price', type=float, help='Invalid field!')
-        
-            update_product_args = product_data_parser.parse_args()
+            except ValidationError as error:
+                return abort(501,error.messages)
             
-            product.description = update_product_args["description"]
-            product.price = update_product_args["price"]
-            
+            product.name = new_data_product.name
+            product.description = new_data_product.description
+            product.price = new_data_product.price
+            product.quantity = new_data_product.quantity
+
             db.session.commit()
                 
-            return ProductSchema().jsonify(product)
+            return ProductSchema().dump(product)
         else:
             return abort(500, "no such product was found")
         
@@ -87,12 +76,26 @@ class ProductsApi(Resource):
         
         products = Product.query.all()
         
-        return products_chema.jsonify(products)
+        return products_chema.dump(products)
     
+class CommentApi(Resource):
+    
+    def post(self):
+        print(request)
+        # pprint(request.data)
+        comment = CommentSchema().loads(request.data)        
+        
+        db.session.add(comment)
+        db.session.commit()
+        return CommentSchema().dump(comment)
+        # return 0
+        
+
+
 
 api.add_resource(ProductApi,'/product/<int:product_id>','/product')
 api.add_resource(ProductsApi,'/products')
-
+api.add_resource(CommentApi,'/comment')
 
 if __name__ == '__main__':
     app.run(port=8000, debug=True)
