@@ -1,7 +1,10 @@
+from pprint import pprint
+from marshmallow import ValidationError
 from init import app, db
 from flask_restful import Api, Resource, marshal_with, fields, reqparse
 from flask import abort, request
-from flask_marshmallow import Marshmallow
+from flask_sqlalchemy import SQLAlchemy
+from flask_marshmallow import Marshmallow 
 
 
 from model.product import Product
@@ -10,9 +13,13 @@ marshmallow = Marshmallow(app)
 
 product_fields = {"name": fields.Raw, "description": fields.Raw, "price": fields.Float, "quantity": fields.Integer}
 
-class ProductSchema(marshmallow.Schema):
+# class ProductSchema(marshmallow.Schema):
+#     class Meta:
+#         fields = ('id','name', 'description', 'quantity', 'price')
+
+class ProductSchema(marshmallow.SQLAlchemyAutoSchema):
     class Meta:
-        fields = ('id','name', 'description', 'quantity', 'price')
+        model = Product
 
 
 products_chema = ProductSchema(many=True)
@@ -28,12 +35,13 @@ class ProductApi(Resource):
     def post(self):
         
         try:
-            product_dict = ProductSchema().loads(request.data)
-        except:
-            return {"message": "Invalid data"}
+           product_dict = ProductSchema().loads(request.data)
+           product = Product(**product_dict)
+        except ValidationError as err:
+            return abort(501,err.messages)
         
-        product = Product(**product_dict)
-
+        
+        
         db.session.add(product)
         db.session.commit()
         
