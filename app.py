@@ -6,8 +6,9 @@ from flask import abort, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow 
 from schema.productschema import ProductSchema
-from schema.commentschema import CommentSchema
+from schema.commentschema import CommentSchema, OnlyCommentSchema
 from model.product import Product
+from model.comment import Comment
 api = Api(app)
 marshmallow = Marshmallow(app)
 
@@ -80,22 +81,44 @@ class ProductsApi(Resource):
     
 class CommentApi(Resource):
     
+    def get(self,comment_id):
+        
+        comment = db.session.get(Comment,comment_id)
+    
+        return CommentSchema().dump(comment)
+        
+        
     def post(self):
-        print(request)
-        # pprint(request.data)
-        comment = CommentSchema().loads(request.data)        
+
+        try:
+            comment = CommentSchema().loads(request.data)        
+        except ValidationError as err:
+            return abort(400,err.messages)
         
         db.session.add(comment)
         db.session.commit()
-        return CommentSchema().dump(comment)
-        # return 0
         
+        return CommentSchema().dump(comment)
+    
+    
+    
+    
+    
+        
+class CommentsApi(Resource):
+    
+    def get(self,product_id):
+    
+        comments = Comment.query.filter_by(product_id=product_id).all()
+
+        return CommentSchema(many=True).dump(comments)
 
 
 
 api.add_resource(ProductApi,'/product/<int:product_id>','/product')
 api.add_resource(ProductsApi,'/products')
-api.add_resource(CommentApi,'/comment')
+api.add_resource(CommentApi,'/comment','/comment/<int:comment_id>')
+api.add_resource(CommentsApi,'/comments/<int:product_id>')
 
 if __name__ == '__main__':
     app.run(port=8000, debug=True)
